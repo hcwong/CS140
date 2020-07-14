@@ -24,6 +24,11 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+/* List of all processes that are in THREAD_SLEEP state 
+   The scheduler decrements the ticks every timer tick, 
+   once it is done, it is added back to the ready list*/
+static struct list sleep_list;
+
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -92,6 +97,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -133,6 +139,8 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  /* Update the sleeping threads */
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -312,6 +320,25 @@ thread_yield (void)
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
+}
+
+/* Causes the thread to sleep by the number of ticks specified in the argument */
+void 
+thread_sleep (int64_t ticks)
+{
+  struct thread *cur = thread_current ();
+
+  enum intr_level old_level;
+
+  /* Allocate thread. */
+  t = palloc_get_page (PAL_ZERO);
+  if (t == NULL)
+    return TID_ERROR;
+
+  t->thread_struct = cur;
+  t->timer_ticks_left = ticks;
+  cur->status = THREAD_SLEEP;
+
 }
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
