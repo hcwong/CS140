@@ -108,6 +108,8 @@ struct sleep_thread
   {
     thread *thread_struct;    
     int timer_ticks_left;
+
+    struct list_elem sleep_elem;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -133,6 +135,7 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+void thread_sleep (int64_t);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);

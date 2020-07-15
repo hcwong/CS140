@@ -141,6 +141,7 @@ thread_tick (void)
     kernel_ticks++;
 
   /* Update the sleeping threads */
+  check_sleep_list();
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -328,17 +329,23 @@ thread_sleep (int64_t ticks)
 {
   struct thread *cur = thread_current ();
 
-  enum intr_level old_level;
+  // If idle thread, do not let it sleep
+  ASSERT (cur != idle_thread);
 
+  enum intr_level old_level = intr_disable ();
   /* Allocate thread. */
   t = palloc_get_page (PAL_ZERO);
   if (t == NULL)
     return TID_ERROR;
 
+  /* Inititialize the values here */
+  memset (t, 0, sizeof *t);
   t->thread_struct = cur;
   t->timer_ticks_left = ticks;
   cur->status = THREAD_SLEEP;
-
+  list_push_back (&sleep_list, &(t->list_elem);
+  schedule();
+  intr_set_level (old_level);
 }
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
@@ -590,6 +597,30 @@ schedule (void)
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
+}
+
+/* Checks the sleep thread and decrements the ticks */
+static void 
+check_sleep_list(void)
+{
+  struct list_elem *e = list.begin (&sleep_list);
+  ASSERT (intr_get_level () == INTR_OFF);
+
+  while (e != list_end(&sleep_list)) 
+    {
+      struct sleep_thread *s_t = list_entry (e, struct sleep_thread, list_elem);
+      s_t->timer_ticks_left--;
+
+      if (s_t->timer_ticks_left == 0) {
+        // Once timer ticks expired, remove it from the sleep list and reinsert it
+        // into the ready list
+        e = list_remove (&*(s_t->list_elem));
+        list_push_back (&ready_list, s_t->thread_struct->elem);
+        palloc_free_page (s_t);
+      } else {
+        e = list.next (e);
+      }
+    }
 }
 
 /* Returns a tid to use for a new thread. */
