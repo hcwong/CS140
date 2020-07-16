@@ -73,6 +73,7 @@ static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
+static void check_sleep_list (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
@@ -334,7 +335,7 @@ thread_sleep (int64_t ticks)
 
   enum intr_level old_level = intr_disable ();
   /* Allocate thread. */
-  t = palloc_get_page (PAL_ZERO);
+  struct sleep_thread *t = palloc_get_page (PAL_ZERO);
   if (t == NULL)
     return TID_ERROR;
 
@@ -343,7 +344,7 @@ thread_sleep (int64_t ticks)
   t->thread_struct = cur;
   t->timer_ticks_left = ticks;
   cur->status = THREAD_SLEEP;
-  list_push_back (&sleep_list, &(t->list_elem);
+  list_push_back (&sleep_list, &(t->sleep_elem));
   schedule();
   intr_set_level (old_level);
 }
@@ -601,24 +602,24 @@ schedule (void)
 
 /* Checks the sleep thread and decrements the ticks */
 static void 
-check_sleep_list(void)
+check_sleep_list (void)
 {
-  struct list_elem *e = list.begin (&sleep_list);
+  struct list_elem *e = list_begin (&sleep_list);
   ASSERT (intr_get_level () == INTR_OFF);
 
   while (e != list_end(&sleep_list)) 
     {
-      struct sleep_thread *s_t = list_entry (e, struct sleep_thread, list_elem);
+      struct sleep_thread *s_t = list_entry (e, struct sleep_thread, sleep_elem);
       s_t->timer_ticks_left--;
 
       if (s_t->timer_ticks_left == 0) {
         // Once timer ticks expired, remove it from the sleep list and reinsert it
         // into the ready list
-        e = list_remove (&*(s_t->list_elem));
-        list_push_back (&ready_list, s_t->thread_struct->elem);
+        e = list_remove (&(s_t->sleep_elem));
+        list_push_back (&ready_list, &(s_t->thread_struct->elem));
         palloc_free_page (s_t);
       } else {
-        e = list.next (e);
+        e = list_next (e);
       }
     }
 }

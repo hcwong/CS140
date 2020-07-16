@@ -36,7 +36,7 @@ struct sleep_test
   };
 
 /* Information about an individual thread in the test. */
-struct sleep_thread 
+struct sleep_thread_test 
   {
     struct sleep_test *test;     /* Info shared between all threads. */
     int id;                     /* Sleeper ID. */
@@ -51,7 +51,7 @@ static void
 test_sleep (int thread_cnt, int iterations) 
 {
   struct sleep_test test;
-  struct sleep_thread *threads;
+  struct sleep_thread_test *threads;
   int *output, *op;
   int product;
   int i;
@@ -81,7 +81,7 @@ test_sleep (int thread_cnt, int iterations)
   ASSERT (output != NULL);
   for (i = 0; i < thread_cnt; i++)
     {
-      struct sleep_thread *t = threads + i;
+      struct sleep_thread_test *t = threads + i;
       char name[16];
       
       t->test = &test;
@@ -104,7 +104,7 @@ test_sleep (int thread_cnt, int iterations)
   product = 0;
   for (op = output; op < test.output_pos; op++) 
     {
-      struct sleep_thread *t;
+      struct sleep_thread_test *t;
       int new_prod;
 
       ASSERT (*op >= 0 && *op < thread_cnt);
@@ -137,7 +137,7 @@ test_sleep (int thread_cnt, int iterations)
 static void
 sleeper (void *t_) 
 {
-  struct sleep_thread *t = t_;
+  struct sleep_thread_test *t = t_;
   struct sleep_test *test = t->test;
   int i;
 

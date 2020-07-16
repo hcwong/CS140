@@ -106,7 +106,7 @@ struct thread
 /* Struct to represent a sleeping thread */
 struct sleep_thread 
   {
-    thread *thread_struct;    
+    struct thread *thread_struct;    
     int timer_ticks_left;
 
     struct list_elem sleep_elem;
