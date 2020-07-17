@@ -330,6 +330,12 @@ thread_sleep (int64_t ticks)
 {
   struct thread *cur = thread_current ();
 
+  // If invalid tick number given, just ignore
+  if (ticks <= 0) 
+    {
+      return;
+    }
+
   // If idle thread, do not let it sleep
   ASSERT (cur != idle_thread);
 
