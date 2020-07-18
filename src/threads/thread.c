@@ -408,6 +408,28 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
+/* Changes a thread's ready list. Assumes that the thread's priority field
+   has been updated but it is still in the old ready list */
+void
+change_thread_ready_list(int old_priority, struct thread *t) 
+{
+  struct list_elem *e = list_begin (&(ready_lists[old_priority]));
+
+  while (e != list_end(&(ready_lists[old_priority]))) 
+    {
+      struct thread *curr_t = list_entry (e, struct thread, elem);
+
+      if (curr_t->tid == t->tid) {
+        e = list_remove (&(curr_t->elem));
+        list_push_back (&(ready_lists[curr_t->priority]),
+                        &(curr_t->elem));
+        return;
+      } else {
+        e = list_next (e);
+      }
+    }
+}
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) 
