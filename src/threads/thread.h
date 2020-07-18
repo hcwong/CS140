@@ -119,6 +119,7 @@ extern bool thread_mlfqs;
 
 void thread_init (void);
 void thread_start (void);
+int get_highest_priority_ready_list(void);
 
 void thread_tick (void);
 void thread_print_stats (void);

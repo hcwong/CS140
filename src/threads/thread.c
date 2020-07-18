@@ -20,9 +20,10 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
-/* List of processes in THREAD_READY state, that is, processes
-   that are ready to run but not actually running. */
-static struct list ready_list;
+/* List of processes in THREAD_READY state arrranged according to the 64 priorities,
+   that is, processes that are ready to run by not actually running */
+#define READY_LISTS_SIZE 64;
+static struct list ready_lists[READY_LISTS_SIZE];
 
 /* List of all processes that are in THREAD_SLEEP state 
    The scheduler decrements the ticks every timer tick, 
@@ -96,9 +97,13 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleep_list);
+
+  // Initialize all the ready lists
+  for (int i = 0; i < READY_LISTS_SIZE; i++) {
+    list_init (&ready_lists[i]);
+  }
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -122,6 +127,19 @@ thread_start (void)
 
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
+}
+
+/* Gets the highest non empty ready list
+   Returns -1 if all threads are empty */
+int 
+get_highest_priority_ready_list(void)
+{
+  for (int i = PRI_MAX; i >= PRI_MIN; i--) {
+    if (!list_size(&(ready_lists[i]))) {
+      return i;
+    } 
+  }  
+  return -1;
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -247,7 +265,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_push_back (&(ready_lists[t->priority]), &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -318,7 +336,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_push_back (&(ready_lists[cur->priority]), &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -377,6 +395,10 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  
+  if (new_priority < get_highest_priority_ready_list()) {
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -531,10 +553,12 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  int highest_pri_ready_list = get_highest_priority_ready_list();
+  if (highest_pri_ready_list == -1)
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    return list_entry (list_pop_front (&ready_lists[highest_pri_ready_list]),
+                                        struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -622,7 +646,8 @@ check_sleep_list (void)
         // Once timer ticks expired, remove it from the sleep list and reinsert it
         // into the ready list
         e = list_remove (&(s_t->sleep_elem));
-        list_push_back (&ready_list, &(s_t->thread_struct->elem));
+        list_push_back (&(ready_lists[s_t->thread_struct->priority]),
+                        &(s_t->thread_struct->elem));
         palloc_free_page (s_t);
       } else {
         e = list_next (e);
