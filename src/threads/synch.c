@@ -336,3 +336,9 @@ cond_broadcast (struct condition *cond, struct lock *lock)
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
 }
+
+// How should priority donation go
+// Priority inversion occurs when there is a lower priority thread holding the lock
+void priority_donation() {
+
+}

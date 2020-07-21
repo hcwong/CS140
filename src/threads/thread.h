@@ -23,7 +23,17 @@ typedef int tid_t;
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
-#define PRI_MAX 63                      /* Highest priority. */
+#define PRI_MAX 63                      /* Highest priority. */ 
+
+
+#define DONATION_LVL_INACTIVE -1
+struct priority_donation {
+  // By default this is the same as priority if there is no donation
+  int original_priority; 
+  // If the value is DONATION_LVL_INACTIVE, then there is no priority donation
+  // Donation levels, starts at 1, once it hits 8, we stop priority donation
+  int donation_level;
+}
 
 /* A kernel thread or user process.
 
@@ -98,6 +108,9 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+    
+    /* Struct to handle priority donation */
+    struct priority_donation donation;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
