@@ -22,7 +22,7 @@
 
 /* List of processes in THREAD_READY state arrranged according to the 64 priorities,
    that is, processes that are ready to run by not actually running */
-#define READY_LISTS_SIZE 64;
+#define READY_LISTS_SIZE 64
 static struct list ready_lists[READY_LISTS_SIZE];
 
 /* List of all processes that are in THREAD_SLEEP state 
@@ -542,12 +542,14 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
 
+  struct donation_info donation = {priority, DONATION_LVL_INACTIVE};
+
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  t->donation = {priority, DONATION_LVL_INACTIVE};
+  t->donation = donation;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();

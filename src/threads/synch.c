@@ -196,6 +196,9 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  // Performs priority donation to the holder if necessary
+  priority_donation(lock->holder);
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -233,6 +236,9 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+  // Restores the priority of the current thread if there was donation
+  restore_priority();
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -337,8 +343,38 @@ cond_broadcast (struct condition *cond, struct lock *lock)
     cond_signal (cond, lock);
 }
 
-// How should priority donation go
-// Priority inversion occurs when there is a lower priority thread holding the lock
-void priority_donation() {
+/* Performs priority donation when a thread encounters a lock */
+void
+priority_donation (struct thread *holder)
+{
+  if (thread_current ()->priority < holder->priority) 
+    return;
 
+  /* We cannot just use donation.original_priority due to the possibility of nested donations
+     Original priority never changes but it may been have bumped multiple times */
+  int holder_old_priority = holder->priority;
+
+  if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
+    holder->donation.donation_level = 1;
+    holder->donation.original_priority = holder->priority;
+    holder->priority = thread_current ()->priority;
+  } else if (holder->donation.donation_level < MAX_DONATION_LEVEL) {
+    holder->donation.donation_level++;
+    holder->priority = thread_current ()->priority;
+  }
+
+  // Bump the holder thread if it is in lower priority ready list
+  change_thread_ready_list(holder_old_priority, holder);
+}
+
+void
+restore_priority (void)
+{
+  struct thread *holder = thread_current ();
+  if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
+    return;
+  }
+
+  holder->priority = holder->donation.original_priority;
+  holder->donation.donation_level = DONATION_LVL_INACTIVE;
 }

@@ -27,13 +27,14 @@ typedef int tid_t;
 
 
 #define DONATION_LVL_INACTIVE -1
-struct priority_donation {
+#define MAX_DONATION_LEVEL 8
+struct donation_info {
   // By default this is the same as priority if there is no donation
   int original_priority; 
   // If the value is DONATION_LVL_INACTIVE, then there is no priority donation
   // Donation levels, starts at 1, once it hits 8, we stop priority donation
   int donation_level;
-}
+};
 
 /* A kernel thread or user process.
 
@@ -110,7 +111,7 @@ struct thread
 #endif
     
     /* Struct to handle priority donation */
-    struct priority_donation donation;
+    struct donation_info donation;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
