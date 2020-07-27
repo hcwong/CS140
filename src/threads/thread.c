@@ -135,7 +135,7 @@ int
 get_highest_priority_ready_list(void)
 {
   for (int i = PRI_MAX; i >= PRI_MIN; i--) {
-    if (!list_size(&(ready_lists[i]))) {
+    if (list_size(&(ready_lists[i])) != 0) {
       return i;
     } 
   }  

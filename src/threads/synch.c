@@ -347,7 +347,7 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 void
 priority_donation (struct thread *holder)
 {
-  if (thread_current ()->priority < holder->priority) 
+  if (holder == NULL || thread_current ()->priority < holder->priority) 
     return;
 
   /* We cannot just use donation.original_priority due to the possibility of nested donations
