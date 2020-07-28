@@ -134,6 +134,7 @@ thread_start (void)
 int 
 get_highest_priority_ready_list(void)
 {
+  ASSERT (intr_get_level () == INTR_OFF);
   for (int i = PRI_MAX; i >= PRI_MIN; i--) {
     if (list_size(&(ready_lists[i])) != 0) {
       return i;
@@ -228,6 +229,8 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+
+  thread_yield ();
 
   return tid;
 }
@@ -394,18 +397,24 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  enum intr_level old_level = intr_disable ();
   thread_current ()->priority = new_priority;
   
   if (new_priority < get_highest_priority_ready_list()) {
+    intr_set_level (old_level);
     thread_yield();
   }
+  intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  enum intr_level old_level = intr_disable ();
+  int pri =  thread_current ()->priority;
+  intr_set_level (old_level);
+  return pri;
 }
 
 /* Changes a thread's ready list. Assumes that the thread's priority field
@@ -460,7 +469,17 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
-
+
+/* Return true if a's priority is greater than b's  */
+bool 
+greater_priority_comparator (struct list_elem *a, struct list_elem *b, void *_)
+{
+  struct thread *t_a = list_entry (a, struct thread, elem);
+  struct thread *t_b = list_entry (b, struct thread, elem);
+
+  return t_a->priority > t_b->priority; 
+}
+
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by

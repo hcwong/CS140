@@ -118,6 +118,9 @@ sema_up (struct semaphore *sema)
                                 struct thread, elem));
   sema->value++;
   intr_set_level (old_level);
+
+  // Yield thread
+  thread_yield ();
 }
 
 static void sema_test_helper (void *sema_);
@@ -235,10 +238,11 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->holder = NULL;
-  sema_up (&lock->semaphore);
-
   // Restores the priority of the current thread if there was donation
+  // TODO: Better to redo set priority to handle this: also might want to out in sema_up instead
   restore_priority();
+
+  sema_up (&lock->semaphore);
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -347,7 +351,10 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 void
 priority_donation (struct thread *holder)
 {
+  enum intr_level old_level = intr_disable ();
+
   if (holder == NULL || thread_current ()->priority < holder->priority) 
+    intr_set_level (old_level);
     return;
 
   /* We cannot just use donation.original_priority due to the possibility of nested donations
@@ -355,8 +362,8 @@ priority_donation (struct thread *holder)
   int holder_old_priority = holder->priority;
 
   if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
+    // Don't need to change donation struct original priority as it is set at init thread
     holder->donation.donation_level = 1;
-    holder->donation.original_priority = holder->priority;
     holder->priority = thread_current ()->priority;
   } else if (holder->donation.donation_level < MAX_DONATION_LEVEL) {
     holder->donation.donation_level++;
@@ -365,16 +372,23 @@ priority_donation (struct thread *holder)
 
   // Bump the holder thread if it is in lower priority ready list
   change_thread_ready_list(holder_old_priority, holder);
+
+  intr_set_level (old_level);
 }
 
 void
 restore_priority (void)
 {
+  enum intr_level old_level = intr_disable ();
+
   struct thread *holder = thread_current ();
   if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
+    intr_set_level (old_level);
     return;
   }
 
   holder->priority = holder->donation.original_priority;
   holder->donation.donation_level = DONATION_LVL_INACTIVE;
+
+  intr_set_level (old_level);
 }
