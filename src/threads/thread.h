@@ -34,6 +34,7 @@ struct donation_info {
   // If the value is DONATION_LVL_INACTIVE, then there is no priority donation
   // Donation levels, starts at 1, once it hits 8, we stop priority donation
   int donation_level;
+  struct lock *lock_waiting;
 };
 
 /* A kernel thread or user process.
@@ -160,6 +161,10 @@ int thread_get_priority (void);
 void thread_set_priority (int);
 void change_thread_ready_list(int, struct thread *);
 bool greater_priority_comparator (struct list_elem *, struct list_elem *, void);
+
+/* Priority Donation */
+void priority_donation (struct thread *);
+void restore_priority (void);
 
 int thread_get_nice (void);
 void thread_set_nice (int);

@@ -398,7 +398,12 @@ void
 thread_set_priority (int new_priority) 
 {
   enum intr_level old_level = intr_disable ();
-  thread_current ()->priority = new_priority;
+  struct thread t* current = thread_current ();
+  current->priority = new_priority;
+
+  if (current->donation.lock_waiting != NULL) {
+    priority_donation();  
+  } 
   
   if (new_priority < get_highest_priority_ready_list()) {
     intr_set_level (old_level);
@@ -439,6 +444,59 @@ change_thread_ready_list(int old_priority, struct thread *t)
     }
 }
 
+/* Return true if a's priority is greater than b's  */
+bool 
+greater_priority_comparator (struct list_elem *a, struct list_elem *b, void *_)
+{
+  struct thread *t_a = list_entry (a, struct thread, elem);
+  struct thread *t_b = list_entry (b, struct thread, elem);
+
+  return t_a->priority > t_b->priority; 
+}
+
+/* Performs priority donation when a thread encounters a lock 
+   Can only be called when interrupts are disabled */
+void
+priority_donation (struct thread *holder)
+{
+  ASSERT (!intr_context ());
+  if (holder == NULL || thread_current ()->priority < holder->priority) 
+    return;
+
+  /* We cannot just use donation.original_priority due to the possibility of nested donations
+     Original priority never changes but it may been have bumped multiple times */
+  int holder_old_priority = holder->priority;
+
+  if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
+    // Don't need to change donation struct original priority as it is set at init thread
+    holder->donation.donation_level = 1;
+    holder->priority = thread_current ()->priority;
+  } else if (holder->donation.donation_level < MAX_DONATION_LEVEL) {
+    holder->donation.donation_level++;
+    holder->priority = thread_current ()->priority;
+  }
+
+  // Bump the holder thread if it is in lower priority ready list
+  change_thread_ready_list(holder_old_priority, holder);
+}
+
+void
+restore_priority (void)
+{
+  enum intr_level old_level = intr_disable ();
+
+  struct thread *holder = thread_current ();
+  if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
+    intr_set_level (old_level);
+    return;
+  }
+
+  holder->priority = holder->donation.original_priority;
+  holder->donation.donation_level = DONATION_LVL_INACTIVE;
+
+  intr_set_level (old_level);
+}
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) 
@@ -468,16 +526,6 @@ thread_get_recent_cpu (void)
 {
   /* Not yet implemented. */
   return 0;
-}
-
-/* Return true if a's priority is greater than b's  */
-bool 
-greater_priority_comparator (struct list_elem *a, struct list_elem *b, void *_)
-{
-  struct thread *t_a = list_entry (a, struct thread, elem);
-  struct thread *t_b = list_entry (b, struct thread, elem);
-
-  return t_a->priority > t_b->priority; 
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -561,7 +609,7 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
 
-  struct donation_info donation = {priority, DONATION_LVL_INACTIVE};
+  struct donation_info donation = {priority, DONATION_LVL_INACTIVE, NULL};
 
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;

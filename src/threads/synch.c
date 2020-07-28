@@ -114,6 +114,7 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) 
+    list_sort (&sema->waiters, (list_less_func *) &greater_priority_comparator, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
   sema->value++;
@@ -345,50 +346,4 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
-}
-
-/* Performs priority donation when a thread encounters a lock */
-void
-priority_donation (struct thread *holder)
-{
-  enum intr_level old_level = intr_disable ();
-
-  if (holder == NULL || thread_current ()->priority < holder->priority) 
-    intr_set_level (old_level);
-    return;
-
-  /* We cannot just use donation.original_priority due to the possibility of nested donations
-     Original priority never changes but it may been have bumped multiple times */
-  int holder_old_priority = holder->priority;
-
-  if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
-    // Don't need to change donation struct original priority as it is set at init thread
-    holder->donation.donation_level = 1;
-    holder->priority = thread_current ()->priority;
-  } else if (holder->donation.donation_level < MAX_DONATION_LEVEL) {
-    holder->donation.donation_level++;
-    holder->priority = thread_current ()->priority;
-  }
-
-  // Bump the holder thread if it is in lower priority ready list
-  change_thread_ready_list(holder_old_priority, holder);
-
-  intr_set_level (old_level);
-}
-
-void
-restore_priority (void)
-{
-  enum intr_level old_level = intr_disable ();
-
-  struct thread *holder = thread_current ();
-  if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
-    intr_set_level (old_level);
-    return;
-  }
-
-  holder->priority = holder->donation.original_priority;
-  holder->donation.donation_level = DONATION_LVL_INACTIVE;
-
-  intr_set_level (old_level);
 }
