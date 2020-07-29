@@ -230,7 +230,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  thread_yield ();
+  if (get_highest_priority_ready_list() > priority) thread_yield ();
 
   return tid;
 }
@@ -398,16 +398,15 @@ void
 thread_set_priority (int new_priority) 
 {
   enum intr_level old_level = intr_disable ();
-  struct thread t* current = thread_current ();
+  struct thread *current = thread_current ();
   current->priority = new_priority;
 
   if (current->donation.lock_waiting != NULL) {
-    priority_donation();  
+    priority_donation (current->donation.lock_waiting->holder);  
   } 
   
   if (new_priority < get_highest_priority_ready_list()) {
-    intr_set_level (old_level);
-    thread_yield();
+    thread_yield ();
   }
   intr_set_level (old_level);
 }
@@ -460,24 +459,36 @@ void
 priority_donation (struct thread *holder)
 {
   ASSERT (!intr_context ());
-  if (holder == NULL || thread_current ()->priority < holder->priority) 
-    return;
+  struct thread *current = thread_current ();
 
-  /* We cannot just use donation.original_priority due to the possibility of nested donations
-     Original priority never changes but it may been have bumped multiple times */
-  int holder_old_priority = holder->priority;
+  // Do nested priority donation if there is a holder and the current thread's donation level is not too high
+  while (holder != NULL || current->donation.donation_level <= MAX_DONATION_LEVEL) {
+    if (current->priority <= holder->priority) {
+      return;
+    } 
 
-  if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
-    // Don't need to change donation struct original priority as it is set at init thread
-    holder->donation.donation_level = 1;
-    holder->priority = thread_current ()->priority;
-  } else if (holder->donation.donation_level < MAX_DONATION_LEVEL) {
-    holder->donation.donation_level++;
-    holder->priority = thread_current ()->priority;
+    /* We cannot just use donation.original_priority due to the possibility of nested donations
+       Original priority never changes but it may been have bumped multiple times */
+    int holder_old_priority = holder->priority;
+    int holder_donation_level = holder->donation.donation_level;
+
+    // If the holder has not been boosted, set its boost level
+    if (holder_donation_level == DONATION_LVL_INACTIVE) {
+      holder->donation.donation_level = current->donation.donation_level == DONATION_LVL_INACTIVE
+        ? 1
+        : current->donation.donation_level + 1;  
+    } else {
+      // New holder donation level is min(current donation level, old holder donation level) + 1 
+      holder->donation.donation_level = current->donation.donation_level < holder_donation_level
+        ? current->donation.donation_level + 1
+        : holder_donation_level + 1;
+    }
+
+    change_thread_ready_list(holder_old_priority, holder);
+
+    current = holder;
+    holder = holder->donation.lock_waiting->holder;
   }
-
-  // Bump the holder thread if it is in lower priority ready list
-  change_thread_ready_list(holder_old_priority, holder);
 }
 
 void
@@ -485,14 +496,9 @@ restore_priority (void)
 {
   enum intr_level old_level = intr_disable ();
 
-  struct thread *holder = thread_current ();
-  if (holder->donation.donation_level == DONATION_LVL_INACTIVE) {
-    intr_set_level (old_level);
-    return;
-  }
-
-  holder->priority = holder->donation.original_priority;
-  holder->donation.donation_level = DONATION_LVL_INACTIVE;
+  struct thread *current = thread_current ();
+  current->priority = current->donation.original_priority;
+  current->donation.donation_level = DONATION_LVL_INACTIVE;
 
   intr_set_level (old_level);
 }
