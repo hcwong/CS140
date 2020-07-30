@@ -230,9 +230,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  /*enum intr_level old_level = intr_disable ();*/
-  /*if (get_highest_priority_ready_list() > thread_current ()->priority) thread_yield ();*/
-  /*intr_set_level (old_level);*/
+  enum intr_level old_level = intr_disable ();
+  if (get_highest_priority_ready_list() > thread_current ()->priority) thread_yield ();
+  intr_set_level (old_level);
 
   return tid;
 }
@@ -445,7 +445,7 @@ change_thread_ready_list(int old_priority, struct thread *t)
 
 /* Return true if a's priority is greater than b's  */
 bool 
-greater_priority_comparator (struct list_elem *a, struct list_elem *b, void *_)
+greater_priority_comparator (struct list_elem *a, struct list_elem *b, void *_ UNUSED)
 {
   struct thread *t_a = list_entry (a, struct thread, elem);
   struct thread *t_b = list_entry (b, struct thread, elem);
@@ -462,11 +462,7 @@ priority_donation (struct thread *holder)
   struct thread *current = thread_current ();
 
   // Do nested priority donation if there is a holder and the current thread's donation level is not too high
-  while (holder != NULL 
-      // Don't forget this case because lock waiting is set in lock_acquire but some functions
-      // call sema_down directly
-      && holder->donation.lock_waiting != NULL
-      && current->donation.donation_level <= MAX_DONATION_LEVEL) {
+  while (holder != NULL && current->donation.donation_level <= MAX_DONATION_LEVEL) {
     if (current->priority <= holder->priority) {
       return;
     } 
@@ -475,6 +471,9 @@ priority_donation (struct thread *holder)
        Original priority never changes but it may been have bumped multiple times */
     int holder_old_priority = holder->priority;
     int holder_donation_level = holder->donation.donation_level;
+
+    // Update priority
+    holder->priority = current->priority;
 
     // If the holder has not been boosted, set its boost level
     if (holder_donation_level == DONATION_LVL_INACTIVE) {
@@ -489,6 +488,12 @@ priority_donation (struct thread *holder)
     }
 
     change_thread_ready_list(holder_old_priority, holder);
+
+    // Don't forget this case because lock waiting is set in lock_acquire but some functions
+    // call sema_down directly, so if holder not holidng on to anything just return
+    if (holder->donation.lock_waiting == NULL) {
+      return;
+    }
 
     current = holder;
     holder = holder->donation.lock_waiting->holder;
