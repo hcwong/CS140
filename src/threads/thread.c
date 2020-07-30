@@ -130,7 +130,7 @@ thread_start (void)
 }
 
 /* Gets the highest non empty ready list
-   Returns -1 if all threads are empty */
+   Returns 1 if it is empty */
 int 
 get_highest_priority_ready_list(void)
 {
@@ -230,7 +230,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  if (get_highest_priority_ready_list() > priority) thread_yield ();
+  /*enum intr_level old_level = intr_disable ();*/
+  /*if (get_highest_priority_ready_list() > thread_current ()->priority) thread_yield ();*/
+  /*intr_set_level (old_level);*/
 
   return tid;
 }
@@ -405,9 +407,7 @@ thread_set_priority (int new_priority)
     priority_donation (current->donation.lock_waiting->holder);  
   } 
   
-  if (new_priority < get_highest_priority_ready_list()) {
-    thread_yield ();
-  }
+  if (new_priority < get_highest_priority_ready_list()) thread_yield ();
   intr_set_level (old_level);
 }
 
@@ -462,7 +462,11 @@ priority_donation (struct thread *holder)
   struct thread *current = thread_current ();
 
   // Do nested priority donation if there is a holder and the current thread's donation level is not too high
-  while (holder != NULL || current->donation.donation_level <= MAX_DONATION_LEVEL) {
+  while (holder != NULL 
+      // Don't forget this case because lock waiting is set in lock_acquire but some functions
+      // call sema_down directly
+      && holder->donation.lock_waiting != NULL
+      && current->donation.donation_level <= MAX_DONATION_LEVEL) {
     if (current->priority <= holder->priority) {
       return;
     } 
@@ -651,6 +655,7 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+  ASSERT (intr_get_level() == INTR_OFF);
   int highest_pri_ready_list = get_highest_priority_ready_list();
   if (highest_pri_ready_list == -1)
     return idle_thread;

@@ -67,8 +67,9 @@ sema_down (struct semaphore *sema)
 
   old_level = intr_disable ();
 
-  // Donate priority to any thread holding the lock
-  priority_donation (thread_current()->donation.lock_waiting->holder);
+  // Donate priority to any thread holding the lock if called from lock_acquire
+  if (thread_current ()->donation.lock_waiting != NULL)
+    priority_donation (thread_current ()->donation.lock_waiting->holder);
 
   while (sema->value == 0) 
     {
@@ -132,10 +133,9 @@ sema_up (struct semaphore *sema)
   } 
 
   sema->value++;
-  intr_set_level (old_level);
+  if (get_highest_priority_ready_list() > thread_current ()->priority) thread_yield ();
 
-  // Yield thread
-  thread_yield ();
+  intr_set_level (old_level);
 }
 
 static void sema_test_helper (void *sema_);
