@@ -23,7 +23,22 @@ typedef int tid_t;
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
-#define PRI_MAX 63                      /* Highest priority. */
+#define PRI_MAX 63                      /* Highest priority. */ 
+
+
+#define DONATION_LVL_INACTIVE -1
+#define MAX_DONATION_LEVEL 8
+struct donation_info {
+  // By default this is the same as priority if there is no donation
+  int original_priority; 
+  // If the value is DONATION_LVL_INACTIVE, then there is no priority donation
+  // Donation levels, starts at 1, once it hits 8, we stop priority donation
+  int donation_level;
+  struct lock *lock_waiting;
+
+  // This is the list of threads which have donated to the lock
+  struct list donor_list;
+};
 
 /* A kernel thread or user process.
 
@@ -98,6 +113,10 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+    
+    /* Struct to handle priority donation */
+    struct donation_info donation;
+    struct list_elem donor_elem;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -119,6 +138,7 @@ extern bool thread_mlfqs;
 
 void thread_init (void);
 void thread_start (void);
+int get_highest_priority_ready_list(void);
 
 void thread_tick (void);
 void thread_print_stats (void);
@@ -143,6 +163,12 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void change_thread_ready_list(int, struct thread *);
+bool greater_priority_comparator (struct list_elem *, struct list_elem *, void *);
+
+/* Priority Donation */
+void priority_donation (struct thread *);
+void restore_priority (struct thread *);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
