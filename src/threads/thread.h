@@ -35,6 +35,9 @@ struct donation_info {
   // Donation levels, starts at 1, once it hits 8, we stop priority donation
   int donation_level;
   struct lock *lock_waiting;
+
+  // This is the list of threads which have donated to the lock
+  struct list donor_list;
 };
 
 /* A kernel thread or user process.
@@ -113,6 +116,7 @@ struct thread
     
     /* Struct to handle priority donation */
     struct donation_info donation;
+    struct list_elem donor_elem;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -164,7 +168,7 @@ bool greater_priority_comparator (struct list_elem *, struct list_elem *, void *
 
 /* Priority Donation */
 void priority_donation (struct thread *);
-void restore_priority (void);
+void restore_priority (struct thread *);
 
 int thread_get_nice (void);
 void thread_set_nice (int);

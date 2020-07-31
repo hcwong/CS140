@@ -475,10 +475,13 @@ priority_donation (struct thread *holder)
     // Update priority
     holder->priority = current->priority;
 
+    // Update the holder's donor list with the current thread
+    list_push_back (&holder->donation.donor_list, &current->donor_elem);
+
     // If the holder has not been boosted, set its boost level
     if (holder_donation_level == DONATION_LVL_INACTIVE) {
       holder->donation.donation_level = current->donation.donation_level == DONATION_LVL_INACTIVE
-        ? 1
+        ? 0
         : current->donation.donation_level + 1;  
     } else {
       // New holder donation level is min(current donation level, old holder donation level) + 1 
@@ -501,14 +504,39 @@ priority_donation (struct thread *holder)
 }
 
 void
-restore_priority (void)
+restore_priority (struct thread *to_delete)
 {
+  ASSERT (to_delete != NULL);
   enum intr_level old_level = intr_disable ();
 
   struct thread *current = thread_current ();
-  current->priority = current->donation.original_priority;
-  current->donation.donation_level = DONATION_LVL_INACTIVE;
 
+  struct list_elem *e = list_begin (&(current->donation.donor_list));
+  while (e != list_end(&(current->donation.donor_list)))
+    {
+      struct thread *curr_t = list_entry (e, struct thread, donor_elem);
+
+      if (curr_t->tid == to_delete->tid) {
+        e = list_remove (&(curr_t->donor_elem));
+        break;
+      } else {
+        e = list_next (e);
+      }
+    }
+
+  if (list_empty(&(current->donation.donor_list)) || e == list_end(&(current->donation.donor_list))) {
+    current->priority = current->donation.original_priority;
+    current->donation.donation_level = DONATION_LVL_INACTIVE;
+  } else {
+    list_sort (&(current->donation.donor_list), (list_less_func *) &greater_priority_comparator, NULL);
+    struct thread *curr_t  = list_entry (list_begin(&(current->donation.donor_list)), 
+                                        struct thread, donor_elem);
+    current->priority = curr_t->priority;
+    current->donation.donation_level = curr_t->donation.donation_level + 1 < current->donation.donation_level - 1
+      ? curr_t->donation.donation_level + 1
+      : current->donation.donation_level - 1;
+  }
+    
   intr_set_level (old_level);
 }
 
@@ -624,7 +652,9 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
 
-  struct donation_info donation = {priority, DONATION_LVL_INACTIVE, NULL};
+  struct list donor_list;
+  list_init(&donor_list);
+  struct donation_info donation = {priority, DONATION_LVL_INACTIVE, NULL, donor_list};
 
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;

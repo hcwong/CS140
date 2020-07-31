@@ -123,13 +123,13 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
 
-  // Restore the priority of the original thread
-  restore_priority();
-
   if (!list_empty (&sema->waiters)) {
     list_sort (&sema->waiters, (list_less_func *) &greater_priority_comparator, NULL);
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+    struct thread *to_delete = list_entry (list_pop_front (&sema->waiters),
+                                struct thread, elem);
+    // Restore the priority of the original thread
+    restore_priority(to_delete);
+    thread_unblock (to_delete);
   } 
 
   sema->value++;
