@@ -410,7 +410,7 @@ thread_set_priority (int new_priority)
     priority_donation (current->donation.lock_waiting->holder);  
   } 
   
-  if (new_priority < get_highest_priority_ready_list()) thread_yield ();
+  if (get_highest_priority_ready_list() > new_priority) thread_yield ();
   intr_set_level (old_level);
 }
 
@@ -476,7 +476,7 @@ priority_donation (struct thread *holder)
 
   // Do nested priority donation if there is a holder and the current thread's donation level is not too high
   while (holder != NULL && current->donation.donation_level <= MAX_DONATION_LEVEL) {
-    if (current->priority <= holder->priority) {
+    if (current->priority < holder->priority) {
       return;
     } 
 
@@ -499,10 +499,6 @@ priority_donation (struct thread *holder)
         ? current->donation.donation_level + 1
         : holder_donation_level + 1;
     }
-
-    // Insert the lock into the donor_list
-    list_insert_ordered(&holder->donor_list, &current->donor_elem, 
-        (list_less_func *)&greater_priority_comparator_donor, NULL);
 
     change_thread_ready_list(holder_old_priority, holder);
 

@@ -123,9 +123,6 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
 
-  // Restore the priority of the original thread
-  restore_priority();
-
   if (!list_empty (&sema->waiters)) {
     list_sort (&sema->waiters, (list_less_func *) &greater_priority_comparator, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
@@ -215,7 +212,15 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   // Registers that the thread is waiting for said lock
-  thread_current ()->donation.lock_waiting = lock;
+  struct thread *current = thread_current ();
+  current->donation.lock_waiting = lock;
+
+  // Insert the lock into the donor_list
+  // IMPT: Have to do it here and not during priority donation
+  if (lock->holder != NULL)
+    list_insert_ordered(&(lock->holder->donor_list), &current->donor_elem, 
+        (list_less_func *)&greater_priority_comparator_donor, NULL);
+
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
@@ -254,6 +259,9 @@ lock_release (struct lock *lock)
 
   enum intr_level old_level = intr_disable ();
   prune_donor_list (lock);
+  // Restore the priority of the original thread
+  restore_priority();
+  redonate_priority_from_donor_list ();
   intr_set_level (old_level);
 
   lock->holder = NULL;
