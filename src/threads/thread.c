@@ -401,7 +401,10 @@ thread_set_priority (int new_priority)
 {
   enum intr_level old_level = intr_disable ();
   struct thread *current = thread_current ();
+  current->donation.original_priority = new_priority;
   current->priority = new_priority;
+
+  redonate_priority_from_donor_list();
 
   if (current->donation.lock_waiting != NULL) {
     priority_donation (current->donation.lock_waiting->holder);  
@@ -453,6 +456,16 @@ greater_priority_comparator (struct list_elem *a, struct list_elem *b, void *_ U
   return t_a->priority > t_b->priority; 
 }
 
+/* Return true if a's priority is greater than b's. For use with donor_elem  */
+bool 
+greater_priority_comparator_donor (struct list_elem *a, struct list_elem *b, void *_ UNUSED)
+{
+  struct thread *t_a = list_entry (a, struct thread, donor_elem);
+  struct thread *t_b = list_entry (b, struct thread, donor_elem);
+
+  return t_a->priority > t_b->priority; 
+}
+
 /* Performs priority donation when a thread encounters a lock 
    Can only be called when interrupts are disabled */
 void
@@ -487,6 +500,10 @@ priority_donation (struct thread *holder)
         : holder_donation_level + 1;
     }
 
+    // Insert the lock into the donor_list
+    list_insert_ordered(&holder->donor_list, &current->donor_elem, 
+        (list_less_func *)&greater_priority_comparator_donor, NULL);
+
     change_thread_ready_list(holder_old_priority, holder);
 
     // Don't forget this case because lock waiting is set in lock_acquire but some functions
@@ -510,6 +527,45 @@ restore_priority (void)
   current->donation.donation_level = DONATION_LVL_INACTIVE;
 
   intr_set_level (old_level);
+}
+
+// Sometimes we need to redonate priority after removing some locks from donor_list
+void 
+redonate_priority_from_donor_list (void)
+{
+  ASSERT (!intr_context ());
+  if (!list_empty (&thread_current ()->donor_list))
+    {
+      // Donor_list is sorted
+      struct thread *front = list_entry(list_front(&thread_current ()->donor_list),
+          struct thread, donor_elem);
+      if (front->priority > thread_current ()->priority)
+        {
+          thread_current ()->priority = front->priority;             
+          // TODO: Maybe check if it exceeds max donation level?
+          thread_current ()->donation.donation_level = front->donation.donation_level + 1;
+        }
+    }
+}
+
+// When succesfully sema down a lock, remove the donor threads that donated because of aforementioned lock
+void
+prune_donor_list (struct lock *lock_to_release)
+{
+  ASSERT (!intr_context ());
+  struct thread *current = thread_current ();
+
+  struct list_elem *e = list_begin (&(current->donor_list));
+  while (e != list_end(&(current->donor_list)))
+    {
+      struct thread *element = list_entry (e, struct thread, donor_elem);
+
+      if (element->donation.lock_waiting == lock_to_release) {
+        e = list_remove (&(element->donor_elem));
+      } else {
+        e = list_next (e);
+      }
+    }
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -625,6 +681,7 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (name != NULL);
 
   struct donation_info donation = {priority, DONATION_LVL_INACTIVE, NULL};
+  struct list donor_list;
 
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
@@ -632,6 +689,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->donation = donation;
+  t->donor_list = donor_list;
+  list_init(&t->donor_list);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();

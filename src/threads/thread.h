@@ -113,6 +113,8 @@ struct thread
     
     /* Struct to handle priority donation */
     struct donation_info donation;
+    struct list_elem donor_elem;
+    struct list donor_list;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -161,10 +163,13 @@ int thread_get_priority (void);
 void thread_set_priority (int);
 void change_thread_ready_list(int, struct thread *);
 bool greater_priority_comparator (struct list_elem *, struct list_elem *, void *);
+bool greater_priority_comparator_donor (struct list_elem *, struct list_elem *, void *);
 
 /* Priority Donation */
 void priority_donation (struct thread *);
 void restore_priority (void);
+void redonate_priority_from_donor_list (void);
+void prune_donor_list (struct lock *);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
