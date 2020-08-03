@@ -32,6 +32,9 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+// Static function signatures
+static bool greater_priority_comparator_semaphores (struct list_elem *, struct list_elem *, void *);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -349,9 +352,12 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
+  if (!list_empty (&cond->waiters))  {
+    // IMPT: Don't forget to sort the waiters
+    list_sort (&cond->waiters, (list_less_func *) &greater_priority_comparator_semaphores, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -368,4 +374,27 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+/* Return true if a's priority is greater than b's. For use with semaphore_elem  */
+static bool 
+greater_priority_comparator_semaphores (struct list_elem *a, struct list_elem *b, void *_ UNUSED)
+{
+  struct semaphore_elem *s_a = list_entry (a, struct semaphore_elem, elem);
+  struct semaphore_elem *s_b = list_entry (b, struct semaphore_elem, elem);
+
+  if (list_empty(&s_a->semaphore.waiters)) {
+    return !list_empty(&s_b->semaphore.waiters);
+  }
+
+  if (list_empty(&s_b->semaphore.waiters))
+    return true;
+
+  list_sort(&s_a->semaphore.waiters, (list_less_func *) &greater_priority_comparator, NULL);
+  list_sort(&s_b->semaphore.waiters, (list_less_func *) &greater_priority_comparator, NULL);
+
+  struct thread *t_a = list_entry (list_front(&s_a->semaphore.waiters), struct thread, elem);
+  struct thread *t_b = list_entry (list_front(&s_b->semaphore.waiters), struct thread, elem);
+
+  return t_a->priority > t_b->priority; 
 }
