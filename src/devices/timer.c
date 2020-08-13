@@ -17,6 +17,8 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+#define TICKS_PER_SECOND 100
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -170,6 +172,8 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  if (ticks % TICKS_PER_SECOND == 0)
+    thread_adjust_load_avg (); // Adjust the load average every second 
   thread_tick ();
 }
 

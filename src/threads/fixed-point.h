@@ -34,7 +34,7 @@ add_x_and_y(int x, int y)
 }
 
 int 
-substract_y_from_x (int x, int y)
+subtract_y_from_x (int x, int y)
 {
   return x - y;
 }
@@ -46,7 +46,7 @@ add_x_and_n (int x, int n)
 }
 
 int 
-substract_n_from_x (int x, int n)
+subtract_n_from_x (int x, int n)
 {
   return x - n * f; 
 }

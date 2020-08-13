@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -65,6 +66,9 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+/* MLFQ static variables */
+static LOAD_AVG;
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -99,6 +103,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&all_list);
   list_init (&sleep_list);
+  LOAD_AVG = 0;
 
   // Initialize all the ready lists
   for (int i = 0; i < READY_LISTS_SIZE; i++) {
@@ -584,7 +589,16 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return multiply_x_by_y(LOAD_AVG, 100);
+}
+
+void
+thread_adjust_load_avg (void)
+{
+  ASSERT (intr_get_level() == INTR_OFF)
+  LOAD_AVG = add_x_and_n (
+      multiply_x_by_y (divide_x_by_y (59, 60), LOAD_AVG),
+      multiply_x_by_y (divide_x_by_y (1, 60), get_number_of_ready_lists ()));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -722,6 +736,17 @@ next_thread_to_run (void)
   else
     return list_entry (list_pop_front (&ready_lists[highest_pri_ready_list]),
                                         struct thread, elem);
+}
+
+static int
+get_number_of_ready_lists (void)
+{
+  ASSERT (intr_get_level() == INTR_OFF);
+  int number = 0;
+  for (int i = PRI_MAX; i >= PRI_MIN; i--) {
+    number += list_size(&(ready_lists[i]));
+  }  
+  return number;
 }
 
 /* Completes a thread switch by activating the new thread's page
