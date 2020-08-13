@@ -71,8 +71,10 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
 
   // Donate priority to any thread holding the lock if called from lock_acquire
-  if (thread_current ()->donation.lock_waiting != NULL)
-    priority_donation (thread_current ()->donation.lock_waiting->holder);
+  if (thread_mlfqs) {
+    if (thread_current ()->donation.lock_waiting != NULL)
+      priority_donation (thread_current ()->donation.lock_waiting->holder);
+  }
 
   while (sema->value == 0) 
     {
@@ -261,11 +263,14 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   enum intr_level old_level = intr_disable ();
-  prune_donor_list (lock);
-  // Restore the priority of the original thread
-  restore_priority();
-  redonate_priority_from_donor_list ();
-  intr_set_level (old_level);
+
+  if (thread_mlfqs) {
+    prune_donor_list (lock);
+    // Restore the priority of the original thread
+    restore_priority();
+    redonate_priority_from_donor_list ();
+    intr_set_level (old_level);
+  }
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
